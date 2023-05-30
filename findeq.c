@@ -11,24 +11,21 @@
 #define MAX_FILES 1000
 #define MAX_PATH_LENGTH 256
 #define HASH_SIZE 10007 // hash table size
-#define MD5_DIGEST_LENGTH_STR (MD5_DIGEST_LENGTH*2+1)
 
 int numThreads;
+int numDuplicates = 0;
 int minSize = DEFAULT_BYTES;
 char *outputPath;
 int file_out = 0;
+FILE *outFile;
+pthread_mutex_t lock;
 
-// Node structure
+// Node structure to store file size and last modification
 typedef struct Node {
-  char path[MAX_PATH_LENGTH] ;
-  struct Node * next ;
+  char path[MAX_PATH_LENGTH];
+  struct Node *next;
+  off_t size; // file size
 } Node;
-
-// Hash table
-Node * hashTable[HASH_SIZE] ;
-
-//Mutex for synchronization
-pthread_mutex_t lock ;
 
 typedef struct {
   char paths[MAX_FILES][MAX_PATH_LENGTH];
@@ -41,102 +38,19 @@ typedef struct {
   int end;
 } ThreadArgs;
 
-
-unsigned long hashFile(const char *filePath) {
-    FILE *file = fopen(filePath, "r");
-    if (file == NULL) {
-        perror("Failed to open file");
-        return 0;
-    }
-
-    unsigned long hash = 5381;
-    int c;
-
-    while ((c = getc(file)) != EOF) {
-        hash = ((hash << 5) + hash) + c;
-    }
-
-    fclose(file);
-
-    return hash % HASH_SIZE;
-}
-
+// Hash table
+Node *hashTable[HASH_SIZE];
 
 //Create a node
-Node * createNode(const char* path) {
-  Node* node = (Node*)malloc(sizeof(Node));
+Node *createNode(const char *path, off_t size) {
+  Node *node = (Node *)malloc(sizeof(Node));
   strncpy(node->path, path, MAX_PATH_LENGTH);
-  node -> next = NULL ;
-
-  return node ;
+  node->next = NULL;
+  node->size = size;
+  return node;
 }
 
-//Add file to hash table
-void addFile(const char* path){
-  unsigned long hash = hashFile(path);
-  Node * node = createNode(path) ;
-
-  if (hashTable[hash] == NULL) {
-    hashTable[hash] = node;
-  }
-  else {
-    Node* currentNode = hashTable[hash] ;
-    while (currentNode->next != NULL) {
-      currentNode = currentNode->next;
-    }
-    currentNode->next = node ;
-  }
-}
-
-//Find file in hash table
-bool findFile(const char* path) {
-  unsigned int hash = hashFile(path);
-  Node * node = hashTable[hash] ;
-
-  while (node != NULL) {
-    if(strcmp(node->path, path) == 0 ){
-      return true;
-    }
-    node = node -> next ;
-  }
-
-  return false; 
-}
-
-int numDuplicates = 0;
-
-//Process files
-void * processFiles(void* arg) {
-  ThreadArgs * args = (ThreadArgs *) arg ;
-
-  for(int i = args->start; i < args -> end ; ++ i) {
-    const char* path = args -> FileList ->paths[i];
-
-    pthread_mutex_lock(&lock) ;
-
-    if(findFile(path)) {
-      if (file_out == 1) {
-        FILE *outFile = fopen(outputPath, "a");  // Open the file in append mode
-        if (outFile != NULL) {
-          fprintf(outFile, "Duplicate file: %s\n", path);  // Write to the file
-          printf("Duplicate file: %s\n", path); // 콘솔 창에도 출력
-          fclose(outFile); // Close the file
-          numDuplicates ++ ;
-        }
-      } else {
-        printf("Duplicate file: %s\n", path);
-      }
-    } else {
-      addFile(path);
-    }
-    pthread_mutex_unlock(&lock);
-  }
-
-  return NULL ;
-}
-
-
-void getinputs(int argc, char *argv[]) {
+void getInputs(int argc, char *argv[]) {
   numThreads = 0;
   minSize = 0;
   outputPath = NULL;
@@ -159,20 +73,17 @@ void getinputs(int argc, char *argv[]) {
     }
   }
 
-  // Check if all options have been set and are valid
   if (!validInput || numThreads <= 0 || minSize <= 0 || outputPath == NULL) {
-    printf("Invalid input USAGE: ./findeq -t [numthreads] -m [mim_size of bytes] -o[outputpath]\n DIR(directory to search)\n");
+    printf("Invalid input USAGE: ./findeq -t [numthreads] -m [min_size of bytes] -o [outputpath]\n DIR (directory to search)\n");
     exit(EXIT_FAILURE);
   }
 }
-
 
 void traverseDirectory(const char *dir, FileList *filelist) {
   struct dirent *entry;
   DIR *dp;
 
   dp = opendir(dir);
-
   if (dp == NULL) {
     perror("opendir");
     return;
@@ -195,12 +106,77 @@ void traverseDirectory(const char *dir, FileList *filelist) {
       printf("File added to the list: %s\n" , path);
     }
   }
+
   closedir(dp);
 }
 
-int main(int argc, char *argv[]) {
+int compare_files(const char *file1, const char *file2)
+{
+    FILE *fp1 = fopen(file1, "rb");
+    FILE *fp2 = fopen(file2, "rb");
+    if (!fp1 || !fp2)
+    {
+        if (fp1) fclose(fp1);
+        if (fp2) fclose(fp2);
+        return 0; // 파일 열기 실패
+    }
 
-  getinputs(argc, argv);
+    int result = 1; // 파일이 같다고 가정
+    while (!feof(fp1) && !feof(fp2))
+    {
+        char buf1[1024], buf2[1024];
+        size_t size1 = fread(buf1, 1, sizeof(buf1), fp1);
+        size_t size2 = fread(buf2, 1, sizeof(buf2), fp2);
+
+        if (size1 != size2 || memcmp(buf1, buf2, size1) != 0)
+        {
+            result = 0; // 파일이 다름
+            break;
+        }
+    }
+
+    if (result == 1 && (feof(fp1) != feof(fp2)))
+        result = 0; // 파일 크기가 다름
+
+    fclose(fp1);
+    fclose(fp2);
+    return result;
+}
+
+void *processFiles(void *arg) {
+    ThreadArgs *args = (ThreadArgs *)arg;
+
+    for (int i = args->start; i < args->end; ++i) {
+        const char *path = args->FileList->paths[i];
+
+        struct stat statbuf;
+        stat(path, &statbuf);
+        unsigned int hashIdx = statbuf.st_size % HASH_SIZE;
+
+        pthread_mutex_lock(&lock);
+
+        Node *current = hashTable[hashIdx];
+        while (current != NULL) {
+            if (statbuf.st_size == current->size && compare_files(path, current->path) == 1) {
+                printf("Duplicate file: %s\n", path);
+                numDuplicates++;
+            }
+            current = current->next;
+        }
+        if (current == NULL) {
+            Node *node = createNode(path, statbuf.st_size);
+            node->next = hashTable[hashIdx];
+            hashTable[hashIdx] = node;
+        }
+        pthread_mutex_unlock(&lock);
+    }
+
+    return NULL;
+}
+
+
+int main(int argc, char *argv[]) {
+  getInputs(argc, argv);
   const char *dir = argv[argc - 1];
 
   FileList filelist;
@@ -209,48 +185,45 @@ int main(int argc, char *argv[]) {
   traverseDirectory(dir, &filelist);
 
   //Iniitialize hash table
-  memset(hashTable, 0 , sizeof(Node*) * HASH_SIZE) ;
+  memset(hashTable, 0, sizeof(Node*) * HASH_SIZE);
 
   //Initialilze mutex
-  pthread_mutex_init(&lock, NULL) ;
+  pthread_mutex_init(&lock, NULL);
 
   //Divide work among threads
-  pthread_t threads[MAX_THREADS] ;
-  int filesPerThread = filelist.count / numThreads ;
+  pthread_t threads[MAX_THREADS];
+  int filesPerThread = filelist.count / numThreads;
 
-  for(int i = 0 ; i < numThreads ; ++i ){
-    ThreadArgs* args = (ThreadArgs*)malloc(sizeof(ThreadArgs));
-    args -> FileList = &filelist;
-    args -> start = i * filesPerThread;
-    args -> end = (i == numThreads - 1) ? filelist.count : (i+1) * filesPerThread ;
+  for (int i = 0; i < numThreads; ++i) {
+    ThreadArgs *args = (ThreadArgs*)malloc(sizeof(ThreadArgs));
+    args->FileList = &filelist;
+    args->start = i * filesPerThread;
+    args->end = (i == numThreads - 1) ? filelist.count : (i + 1) * filesPerThread;
 
-    if(pthread_create(&threads[i], NULL , processFiles, args) != 0){
+    if (pthread_create(&threads[i], NULL, processFiles, args) != 0) {
       fprintf(stderr, "Error creating thread\n");
       return 1;
     }
   }
 
-  //wait for all threads to finish
-  for(int i = 0 ; i < numThreads ; ++i) {
-    pthread_join(threads[i] , NULL);
+  //Wait for all threads to finish
+  for (int i = 0; i < numThreads; ++i) {
+    pthread_join(threads[i], NULL);
   }
 
-  // No duplicate files found
-  if(numDuplicates == 0){
+  //No duplicate files found
+  if (numDuplicates == 0) {
     printf("No duplicate files found\n");
+  } else {
+    printf("Total duplicate files found: %d\n", numDuplicates);
   }
 
-  //Clean
-  for(int i = 0 ; i < HASH_SIZE; ++i) {
-    Node* node = hashTable[i];
-    while(node != NULL){
-      Node * next = node -> next ;
-      free(node);
-      node = next;
-    }
-  }
-
+  //Destroy the lock
   pthread_mutex_destroy(&lock);
+
+  if (file_out == 1) {
+    fclose(outFile);
+  }
 
   return 0;
 }
