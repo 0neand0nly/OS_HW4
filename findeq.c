@@ -16,11 +16,10 @@ int numThreads;
 int numDuplicates = 0;
 int minSize = DEFAULT_BYTES;
 char *outputPath;
-int file_out = 0;
 FILE *outFile;
 pthread_mutex_t lock;
 
-// Node structure to store file size and last modification
+// Node structure 
 typedef struct Node {
   char path[MAX_PATH_LENGTH];
   struct Node *next;
@@ -38,8 +37,40 @@ typedef struct {
   int end;
 } ThreadArgs;
 
+typedef struct {
+  char** data ;
+  size_t size ;
+  size_t capacity ;
+} StringSet ;
+
 // Hash table
 Node *hashTable[HASH_SIZE];
+
+StringSet* createSet(){
+  StringSet * set = (StringSet*)malloc(sizeof(StringSet));
+
+  set->data = (char**)malloc(sizeof(char*)*10);
+  set->size = 0 ;
+  set->capacity = 10;
+  return set;
+}
+
+void addToSet(StringSet* set, const char* str){
+  if(set->size == set->capacity){
+    set->capacity *= 2;
+    set-> data = (char**)realloc(set->data, sizeof(char*)* set->capacity);
+  }
+  set->data[set->size++] = strdup(str);
+}
+
+bool isInSet(const StringSet* set, const char* str){
+  for(size_t i = 0 ; i<set->size; ++i){
+    if(strcmp(set -> data[i],str) == 0){
+      return true;
+    }
+  }
+  return false;
+}
 
 //Create a node
 Node *createNode(const char *path, off_t size) {
@@ -66,10 +97,17 @@ void getInputs(int argc, char *argv[]) {
     } else if (strcmp(argv[i], "-o") == 0) {
       i++;
       outputPath = argv[i];
-      file_out = 1;
     } else {
       validInput = false;
       break;
+    }
+  }
+
+  if(outputPath != NULL) {
+    outFile = fopen(outputPath, "w");
+    if(outFile == NULL){
+      printf("Failed to open output file.\n");
+      exit(EXIT_FAILURE);
     }
   }
 
@@ -77,6 +115,8 @@ void getInputs(int argc, char *argv[]) {
     printf("Invalid input USAGE: ./findeq -t [numthreads] -m [min_size of bytes] -o [outputpath]\n DIR (directory to search)\n");
     exit(EXIT_FAILURE);
   }
+
+
 }
 
 void traverseDirectory(const char *dir, FileList *filelist) {
@@ -96,7 +136,6 @@ void traverseDirectory(const char *dir, FileList *filelist) {
 
     char path[MAX_PATH_LENGTH];
     snprintf(path, sizeof(path), "%s/%s", dir, entry->d_name);
-
     stat(path, &statbuf);
 
     if (S_ISDIR(statbuf.st_mode)) {
@@ -143,8 +182,12 @@ int compare_files(const char *file1, const char *file2)
     return result;
 }
 
+
+StringSet* duplicateSet ;
+
 void *processFiles(void *arg) {
     ThreadArgs *args = (ThreadArgs *)arg;
+    duplicateSet = createSet();
 
     for (int i = args->start; i < args->end; ++i) {
         const char *path = args->FileList->paths[i];
@@ -153,15 +196,25 @@ void *processFiles(void *arg) {
         stat(path, &statbuf);
         unsigned int hashIdx = statbuf.st_size % HASH_SIZE;
 
-        pthread_mutex_lock(&lock);
 
         Node *current = hashTable[hashIdx];
         while (current != NULL) {
-            if (statbuf.st_size == current->size && compare_files(path, current->path) == 1) {
-                printf("Duplicate file: %s\n", path);
+          if(statbuf.st_size == current->size){
+            pthread_mutex_lock(&lock);
+            if(compare_files(path,current->path) == 1){
+              if(!isInSet(duplicateSet,path)){
+                addToSet(duplicateSet,path);
+                printf("Duplicate file: %s\n" , path);
+                if(outFile != NULL) {
+                  fprintf(outFile,"Duplicate file: %s\n" , path);
+                }
                 numDuplicates++;
+              }
             }
-            current = current->next;
+            pthread_mutex_unlock(&lock);
+          }
+          current = current->next;
+
         }
         if (current == NULL) {
             Node *node = createNode(path, statbuf.st_size);
@@ -174,14 +227,12 @@ void *processFiles(void *arg) {
     return NULL;
 }
 
-
 int main(int argc, char *argv[]) {
   getInputs(argc, argv);
   const char *dir = argv[argc - 1];
 
   FileList filelist;
   filelist.count = 0;
-
   traverseDirectory(dir, &filelist);
 
   //Iniitialize hash table
@@ -221,9 +272,10 @@ int main(int argc, char *argv[]) {
   //Destroy the lock
   pthread_mutex_destroy(&lock);
 
-  if (file_out == 1) {
+  if (outFile != NULL) {
     fclose(outFile);
   }
 
   return 0;
 }
+
