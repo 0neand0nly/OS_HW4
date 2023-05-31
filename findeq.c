@@ -43,22 +43,32 @@ typedef struct {
   size_t capacity ;
 } StringSet ;
 
-// Hash table
-Node *hashTable[HASH_SIZE];
+typedef struct {
+  char hash[MAX_PATH_LENGTH];
+  StringSet* paths;
+} HashPath;
+
+HashPath* hashTable[HASH_SIZE];
 
 StringSet* createSet(){
   StringSet * set = (StringSet*)malloc(sizeof(StringSet));
-
   set->data = (char**)malloc(sizeof(char*)*10);
   set->size = 0 ;
   set->capacity = 10;
   return set;
 }
 
+HashPath *createHashPath(unsigned long hash) {
+  HashPath *newHashPath = (HashPath *)malloc(sizeof(HashPath));
+  sprintf(newHashPath->hash, "%lu", hash);
+  newHashPath->paths = createSet();
+  return newHashPath;
+}
+
 void addToSet(StringSet* set, const char* str){
   if(set->size == set->capacity){
     set->capacity *= 2;
-    set-> data = (char**)realloc(set->data, sizeof(char*)* set->capacity);
+    set->data = (char**)realloc(set->data, sizeof(char*)* set->capacity);
   }
   set->data[set->size++] = strdup(str);
 }
@@ -115,8 +125,6 @@ void getInputs(int argc, char *argv[]) {
     printf("Invalid input USAGE: ./findeq -t [numthreads] -m [min_size of bytes] -o [outputpath]\n DIR (directory to search)\n");
     exit(EXIT_FAILURE);
   }
-
-
 }
 
 void traverseDirectory(const char *dir, FileList *filelist) {
@@ -149,82 +157,66 @@ void traverseDirectory(const char *dir, FileList *filelist) {
   closedir(dp);
 }
 
-int compare_files(const char *file1, const char *file2)
-{
-    FILE *fp1 = fopen(file1, "rb");
-    FILE *fp2 = fopen(file2, "rb");
-    if (!fp1 || !fp2)
-    {
-        if (fp1) fclose(fp1);
-        if (fp2) fclose(fp2);
-        return 0; // 파일 열기 실패
-    }
+unsigned long calculate_hash(const char *filename) {
+    char data[1024];
+    unsigned long hash = 5381;
+    FILE *inFile = fopen(filename, "rb");
+    int bytes;
 
-    int result = 1; // 파일이 같다고 가정
-    while (!feof(fp1) && !feof(fp2))
-    {
-        char buf1[1024], buf2[1024];
-        size_t size1 = fread(buf1, 1, sizeof(buf1), fp1);
-        size_t size2 = fread(buf2, 1, sizeof(buf2), fp2);
-
-        if (size1 != size2 || memcmp(buf1, buf2, size1) != 0)
-        {
-            result = 0; // 파일이 다름
-            break;
+    while ((bytes = fread(data, 1, 1024, inFile)) != 0) {
+        for(int i = 0; i < bytes; ++i) {
+            hash = ((hash << 5) + hash) + data[i];
         }
     }
 
-    if (result == 1 && (feof(fp1) != feof(fp2)))
-        result = 0; // 파일 크기가 다름
-
-    fclose(fp1);
-    fclose(fp2);
-    return result;
+    fclose(inFile);
+    return hash;
 }
 
-
-StringSet* duplicateSet ;
+unsigned int hash_function(unsigned long hash) {
+    return hash % HASH_SIZE;
+}
 
 void *processFiles(void *arg) {
     ThreadArgs *args = (ThreadArgs *)arg;
-    duplicateSet = createSet();
 
     for (int i = args->start; i < args->end; ++i) {
         const char *path = args->FileList->paths[i];
 
-        struct stat statbuf;
-        stat(path, &statbuf);
-        unsigned int hashIdx = statbuf.st_size % HASH_SIZE;
+        // Calculate hash value
+        unsigned long hash = calculate_hash(path);
+        unsigned int hashIdx = hash_function(hash) % HASH_SIZE;
 
+        pthread_mutex_lock(&lock);
 
-        Node *current = hashTable[hashIdx];
-        while (current != NULL) {
-          if(statbuf.st_size == current->size){
-            pthread_mutex_lock(&lock);
-            if(compare_files(path,current->path) == 1){
-              if(!isInSet(duplicateSet,path)){
-                addToSet(duplicateSet,path);
-                printf("Duplicate file: %s\n" , path);
-                if(outFile != NULL) {
-                  fprintf(outFile,"Duplicate file: %s\n" , path);
-                }
-                numDuplicates++;
-              }
-            }
-            pthread_mutex_unlock(&lock);
-          }
-          current = current->next;
-
-        }
+        HashPath *current = hashTable[hashIdx];
         if (current == NULL) {
-            Node *node = createNode(path, statbuf.st_size);
-            node->next = hashTable[hashIdx];
-            hashTable[hashIdx] = node;
+            // This is a new file, so create a new hash path
+            HashPath *newHashPath = createHashPath(hash);
+            addToSet(newHashPath->paths, path);
+            hashTable[hashIdx] = newHashPath;
+        } else {
+            // This file already exists, so add the path to the existing hash path
+            addToSet(current->paths, path);
         }
+
         pthread_mutex_unlock(&lock);
     }
 
     return NULL;
+}
+
+void printDuplicates() {
+    for (int i = 0; i < HASH_SIZE; ++i) {
+        HashPath* current = hashTable[i];
+        if (current != NULL && current->paths->size > 1) {
+            printf("[\n");
+            for (size_t j = 0; j < current->paths->size; ++j) {
+                printf("%s,\n", current->paths->data[j]);
+            }
+            printf("]\n");
+        }
+    }
 }
 
 int main(int argc, char *argv[]) {
@@ -233,49 +225,36 @@ int main(int argc, char *argv[]) {
 
   FileList filelist;
   filelist.count = 0;
+  // Traverse directory and fill file list
   traverseDirectory(dir, &filelist);
 
-  //Iniitialize hash table
-  memset(hashTable, 0, sizeof(Node*) * HASH_SIZE);
-
-  //Initialilze mutex
-  pthread_mutex_init(&lock, NULL);
-
-  //Divide work among threads
   pthread_t threads[MAX_THREADS];
+  ThreadArgs args[MAX_THREADS];
+
   int filesPerThread = filelist.count / numThreads;
-
   for (int i = 0; i < numThreads; ++i) {
-    ThreadArgs *args = (ThreadArgs*)malloc(sizeof(ThreadArgs));
-    args->FileList = &filelist;
-    args->start = i * filesPerThread;
-    args->end = (i == numThreads - 1) ? filelist.count : (i + 1) * filesPerThread;
+    args[i].FileList = &filelist;
+    args[i].start = i * filesPerThread;
+    args[i].end = (i == numThreads - 1) ? filelist.count : (i + 1) * filesPerThread;
 
-    if (pthread_create(&threads[i], NULL, processFiles, args) != 0) {
-      fprintf(stderr, "Error creating thread\n");
-      return 1;
+    if (pthread_create(&threads[i], NULL, processFiles, (void *)&args[i]) != 0) {
+      printf("Error creating thread\n");
+      return EXIT_FAILURE;
     }
   }
 
-  //Wait for all threads to finish
+  // Wait for all threads to finish
   for (int i = 0; i < numThreads; ++i) {
     pthread_join(threads[i], NULL);
   }
 
-  //No duplicate files found
-  if (numDuplicates == 0) {
-    printf("No duplicate files found\n");
-  } else {
-    printf("Total duplicate files found: %d\n", numDuplicates);
-  }
+  printDuplicates();
 
-  //Destroy the lock
-  pthread_mutex_destroy(&lock);
-
-  if (outFile != NULL) {
+  if(outFile != NULL) {
     fclose(outFile);
   }
 
-  return 0;
-}
+  pthread_mutex_destroy(&lock);
 
+  return EXIT_SUCCESS;
+}
