@@ -157,6 +157,7 @@ void traverseDirectory(const char *dir, FileList *filelist) {
   closedir(dp);
 }
 
+//djb2 hash function
 unsigned long calculate_hash(const char *filename) {
     char data[1024];
     unsigned long hash = 5381;
@@ -190,6 +191,7 @@ void *processFiles(void *arg) {
         pthread_mutex_lock(&lock);
 
         HashPath *current = hashTable[hashIdx];
+
         if (current == NULL) {
             // This is a new file, so create a new hash path
             HashPath *newHashPath = createHashPath(hash);
