@@ -212,9 +212,17 @@ void printDuplicates() {
         if (current != NULL && current->paths->size > 1) {
             printf("[\n");
             for (size_t j = 0; j < current->paths->size; ++j) {
-                printf("%s,\n", current->paths->data[j]);
+                printf("\t%s,\n", current->paths->data[j]);
             }
-            printf("]\n");
+            printf("],\n\n");
+
+            fprintf(outFile,"[\n");
+            for (size_t j = 0; j < current->paths->size; ++j) {
+                fprintf(outFile,"\t%s,\n", current->paths->data[j]);
+            }
+            fprintf(outFile,"],\n\n");
+
+
         }
     }
 }
@@ -225,8 +233,7 @@ int main(int argc, char *argv[]) {
 
   FileList filelist;
   filelist.count = 0;
-  // Traverse directory and fill file list
-  traverseDirectory(dir, &filelist);
+  traverseDirectory(dir, &filelist);  // Traverse directory and fill file list
 
   pthread_t threads[MAX_THREADS];
   ThreadArgs args[MAX_THREADS];
