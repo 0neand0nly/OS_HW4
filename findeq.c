@@ -78,7 +78,7 @@ unsigned traverseTable(const char *path)
     return false;
 }
 
-int int_Handler(int sig)
+/*int int_Handler(int sig)
 {
     if(sig==SIGINT)
     {
@@ -89,7 +89,7 @@ int int_Handler(int sig)
         printf("Number of Duplicated Files : %d\n",dupList_count);
         exit(1);
     }
-}
+}*/
 
 void getinputs(int argc, char *argv[])
 {
@@ -154,12 +154,21 @@ bool Equalfiles(char *path1, char *path2)
 {
     FILE *file1 = fopen(path1, "rb");
     FILE *file2 = fopen(path2, "rb");
-
+    
     if (file1 == NULL || file2 == NULL)
     {
         return false;
     }
-
+    /*struct stat st1;
+    struct stat st2;
+    stat(path1, &st1);
+    stat(path2, &st2);
+    if(st1.st_size!=st2.st_size)
+    {
+        return false;
+    }*/
+    
+    
     bool areEqual = true;
 
     while (true)
@@ -220,7 +229,7 @@ void traverseDirectory(const char *dir, FileList *filelist)
 
     if (dp == NULL)
     {
-        perror("opendir");
+        //perror("opendir");
         return;
     }
 
@@ -235,7 +244,7 @@ void traverseDirectory(const char *dir, FileList *filelist)
 
         if (stat(path, &statbuf) != 0)
         {
-            perror("stat");
+            //perror("stat");
             return;
         }
 
