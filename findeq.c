@@ -67,8 +67,21 @@ void addTable(const char *path)
     unsigned int index = hash(path);
     duplicateFileList *newNode = malloc(sizeof(duplicateFileList));
     strncpy(newNode->path, path, MAX_PATH_LENGTH);
-    newNode->next = table[index].list;
-    table[index].list = newNode;
+    newNode->next = NULL;
+
+    if (table[index].list == NULL)
+    {
+        table[index].list = newNode;
+    }
+    else
+    {
+        duplicateFileList *curr = table[index].list;
+        while (curr->next != NULL)
+        {
+            curr = curr->next;
+        }
+        curr->next = newNode;
+    }
 }
 
 unsigned traverseTable(const char *path)
@@ -86,14 +99,34 @@ unsigned traverseTable(const char *path)
 
 void dumpTable(FILE *fp)
 {
+    fprintf(fp, "[\n"); // 시작 중복 파일 리스트
+
+    bool isFirstGroup = true;
+
     for (int i = 0; i < TABLE_SIZE; i++)
     {
         duplicateFileList *curr = table[i].list;
-        while (curr != NULL)
+        if (curr != NULL)
         {
-            fprintf(fp, "%s\n", curr->path);
+            if (isFirstGroup)
+                isFirstGroup = false;
+            else
+                fprintf(fp, ",\n"); // 중복 파일 그룹 구분을 위한 쉼표와 개행 출력
+
+            fprintf(fp, "\t[\n"); // 시작 중복 파일 그룹
+
+            fprintf(fp, "\t\t\"%s\"", curr->path); // 중복 파일 경로 출력
             curr = curr->next;
+
+            while (curr != NULL)
+            {
+                fprintf(fp, ",\t\t\n\"%s\"", curr->path); // 중복 파일 경로 출력
+                curr = curr->next;
+            }
+
+            fprintf(fp, "\n\t]"); // 종료 중복 파일 그룹
         }
+
         duplicateFileList *temp;
         while (curr != NULL)
         {
@@ -103,18 +136,38 @@ void dumpTable(FILE *fp)
             curr = temp;
         }
     }
+
+    fprintf(fp, "\n]\n"); // 종료 중복 파일 리스트
 }
 
 void dumpTableC()
 {
+    bool isFirstGroup = true;
+
     for (int i = 0; i < TABLE_SIZE; i++)
     {
         duplicateFileList *curr = table[i].list;
-        while (curr != NULL)
+        if (curr != NULL)
         {
-            printf("%s\n", curr->path);
+            if (isFirstGroup)
+                isFirstGroup = false;
+            else
+                printf(",\n"); // 중복 파일 그룹 구분을 위한 쉼표와 개행 출력
+
+            printf("[\n"); // 시작 중복 파일 그룹
+
+            printf("%s", curr->path); // 중복 파일 경로 출력
             curr = curr->next;
+
+            while (curr != NULL)
+            {
+                printf(",\n%s", curr->path); // 중복 파일 경로 출력
+                curr = curr->next;
+            }
+
+            printf("\n]"); // 종료 중복 파일 그룹
         }
+
         duplicateFileList *temp;
         while (curr != NULL)
         {
@@ -151,16 +204,14 @@ void sig_Handler(int sig)
 {
     if (sig == SIGINT)
     {
-        printf("Number of Duplicated Files : %d\n", dupList_count);
+        printf("\nProgress: %d files processed\n", dupList_count);
         killProgram();
+        exit(0);
     }
     else if (sig == SIGALRM)
     {
-        printf("Number of Duplicated Files : %d\n", dupList_count);
-
-        timer.it_value.tv_sec = 5;
-        timer.it_value.tv_usec = 0;
-        setitimer(ITIMER_REAL, &timer, NULL);
+        printf("Progress: %d files processed\n", dupList_count);
+        alarm(5);
     }
 }
 
@@ -370,7 +421,20 @@ void traverseDirectory(const char *dir, FileList *filelist)
 
 int main(int argc, char *argv[])
 {
-    clock_t start = clock();
+    signal(SIGINT, sig_Handler);
+
+    struct timespec start, end;
+    clock_gettime(CLOCK_MONOTONIC, &start);
+    double elapsed;
+
+    struct sigaction sa;
+    memset(&sa, 0, sizeof(sa));
+    sa.sa_handler = &sig_Handler;
+    sigaction(SIGALRM, &sa, NULL);
+
+    timer.it_value.tv_sec = 5;
+    timer.it_value.tv_usec = 0;
+    setitimer(ITIMER_REAL, &timer, NULL);
 
     getinputs(argc, argv);
     const char *dir = argv[argc - 1];
@@ -422,12 +486,12 @@ int main(int argc, char *argv[])
 
     pthread_mutex_destroy(&lock);
     pthread_cond_destroy(&cond);
+    clock_gettime(CLOCK_MONOTONIC, &end);
+    elapsed = (end.tv_sec - start.tv_sec);
+    elapsed += (end.tv_nsec - start.tv_nsec) / 1000000000.0;
+    printf("Execution Time: %.2f seconds\n", elapsed);
 
     killProgram();
-
-    clock_t end = clock();
-    double cpu_time_used = ((double)(end - start)) / CLOCKS_PER_SEC;
-    printf("Execution Time: %.2f seconds\n", cpu_time_used);
 
     return 0;
 }
