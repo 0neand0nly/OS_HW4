@@ -36,7 +36,7 @@ typedef struct
 
 typedef struct
 {
-    FileList *FileList;
+    FileList *fileList;
     int start;
     int end;
 } ThreadArgs;
@@ -45,11 +45,11 @@ typedef struct node
 {
     char path[MAX_PATH_LENGTH];
     struct node *next;
-} duplicateFileList;
+} DuplicateFileList;
 
 typedef struct
 {
-    duplicateFileList *list;
+    DuplicateFileList *list;
 } HashTable;
 
 HashTable table[TABLE_SIZE];
@@ -65,7 +65,7 @@ unsigned int hash(const char *str)
 void addTable(const char *path)
 {
     unsigned int index = hash(path);
-    duplicateFileList *newNode = malloc(sizeof(duplicateFileList));
+    DuplicateFileList *newNode = malloc(sizeof(DuplicateFileList));
     strncpy(newNode->path, path, MAX_PATH_LENGTH);
     newNode->next = NULL;
 
@@ -75,7 +75,7 @@ void addTable(const char *path)
     }
     else
     {
-        duplicateFileList *curr = table[index].list;
+        DuplicateFileList *curr = table[index].list;
         while (curr->next != NULL)
         {
             curr = curr->next;
@@ -84,10 +84,10 @@ void addTable(const char *path)
     }
 }
 
-unsigned traverseTable(const char *path)
+unsigned int traverseTable(const char *path)
 {
     unsigned int index = hash(path);
-    duplicateFileList *curr = table[index].list;
+    DuplicateFileList *curr = table[index].list;
     while (curr != NULL)
     {
         if (strcmp(curr->path, path) == 0)
@@ -99,45 +99,44 @@ unsigned traverseTable(const char *path)
 
 void dumpTable(FILE *fp)
 {
-    fprintf(fp, "[\n"); // 시작 중복 파일 리스트
+    fprintf(fp, "[\n"); // Start of duplicate file list
 
     bool isFirstGroup = true;
 
     for (int i = 0; i < TABLE_SIZE; i++)
     {
-        duplicateFileList *curr = table[i].list;
+        DuplicateFileList *curr = table[i].list;
         if (curr != NULL)
         {
             if (isFirstGroup)
                 isFirstGroup = false;
             else
-                fprintf(fp, ",\n"); // 중복 파일 그룹 구분을 위한 쉼표와 개행 출력
+                fprintf(fp, ",\n"); // Comma and new line for separating duplicate file groups
 
-            fprintf(fp, "\t[\n"); // 시작 중복 파일 그룹
+            fprintf(fp, "\t[\n"); // Start of duplicate file group
 
-            fprintf(fp, "\t\t\"%s\"", curr->path); // 중복 파일 경로 출력
+            fprintf(fp, "\t\t\"%s\"", curr->path); // Print duplicate file path
             curr = curr->next;
 
             while (curr != NULL)
             {
-                fprintf(fp, ",\t\t\n\"%s\"", curr->path); // 중복 파일 경로 출력
+                fprintf(fp, ",\t\t\n\"%s\"", curr->path); // Print duplicate file path
                 curr = curr->next;
             }
 
-            fprintf(fp, "\n\t]"); // 종료 중복 파일 그룹
+            fprintf(fp, "\n\t]"); // End of duplicate file group
         }
 
-        duplicateFileList *temp;
+        DuplicateFileList *temp;
         while (curr != NULL)
         {
             temp = curr->next;
-            free(curr->path);
             free(curr);
             curr = temp;
         }
     }
 
-    fprintf(fp, "\n]\n"); // 종료 중복 파일 리스트
+    fprintf(fp, "\n]\n"); // End of duplicate file list
 }
 
 void dumpTableC()
@@ -146,33 +145,32 @@ void dumpTableC()
 
     for (int i = 0; i < TABLE_SIZE; i++)
     {
-        duplicateFileList *curr = table[i].list;
+        DuplicateFileList *curr = table[i].list;
         if (curr != NULL)
         {
             if (isFirstGroup)
                 isFirstGroup = false;
             else
-                printf(",\n"); // 중복 파일 그룹 구분을 위한 쉼표와 개행 출력
+                printf(",\n"); // Comma and new line for separating duplicate file groups
 
-            printf("[\n"); // 시작 중복 파일 그룹
+            printf("[\n"); // Start of duplicate file group
 
-            printf("%s", curr->path); // 중복 파일 경로 출력
+            printf("%s", curr->path); // Print duplicate file path
             curr = curr->next;
 
             while (curr != NULL)
             {
-                printf(",\n%s", curr->path); // 중복 파일 경로 출력
+                printf(",\n%s", curr->path); // Print duplicate file path
                 curr = curr->next;
             }
 
-            printf("\n]"); // 종료 중복 파일 그룹
+            printf("\n]"); // End of duplicate file group
         }
 
-        duplicateFileList *temp;
+        DuplicateFileList *temp;
         while (curr != NULL)
         {
             temp = curr->next;
-            free(curr->path);
             free(curr);
             curr = temp;
         }
@@ -190,6 +188,8 @@ void killProgram()
             exit(EXIT_FAILURE);
         }
         printf("File Written\n");
+        printf("\nProgress: %d files processed\n", dupList_count);
+
         dumpTable(fp);
 
         fclose(fp);
@@ -215,11 +215,11 @@ void sig_Handler(int sig)
     }
 }
 
-void getinputs(int argc, char *argv[])
+void getInputs(int argc, char *argv[])
 {
     if (argc < 2)
     {
-        printf("Invalid input USAGE: ./findeq -t [numthreads] -m [mim_size of bytes] -o[outputpath]\n DIR(directory to search)\n");
+        printf("Invalid input USAGE: ./findeq -t [numthreads] -m [min_size of bytes] -o [outputpath]\n DIR (directory to search)\n");
         exit(1);
     }
     for (int i = 1; i < argc - 1; i++)
@@ -233,16 +233,15 @@ void getinputs(int argc, char *argv[])
                 exit(1);
             }
             numThreads = atoi(argv[i]);
-            if (numThreads > 65)
+            if (numThreads > MAX_THREADS)
             {
                 printf("Too Many Threads\n");
                 exit(1);
             }
-#ifdef DEBUG
-            printf("Num Threads: %d\n", numThreads);
-#endif
+            #ifdef DEBUG
+                printf("Num Threads: %d\n", numThreads);
+            #endif
         }
-
         else if (strcmp(argv[i], "-m=") == 0)
         {
             i++;
@@ -257,11 +256,10 @@ void getinputs(int argc, char *argv[])
                 printf("Size is Too Small\n");
                 exit(1);
             }
-#ifdef DEBUG
-            printf("Min Bytes: %d\n", minSize);
-#endif
+        #ifdef DEBUG
+             printf("Min Bytes: %d\n", minSize);
+        #endif
         }
-
         else if (strcmp(argv[i], "-o=") == 0)
         {
             i++;
@@ -278,22 +276,22 @@ void getinputs(int argc, char *argv[])
             }
 
             strcpy(outputPath, argv[i]);
-#ifdef DEBUG
+        #ifdef DEBUG
             printf("Output Path: %s\n", outputPath);
-#endif
+        #endif
             //
-            // change the prog to produce output via file
+            // Change the program to produce output via file
             file_out = 1;
         }
         else
         {
-            printf("Invalid input USAGE: ./findeq -t [numthreads] -m [mim_size of bytes] -o[outputpath]\n DIR(directory to search)\n");
+            printf("Invalid input USAGE: ./findeq -t [numthreads] -m [min_size of bytes] -o [outputpath]\n DIR (directory to search)\n");
             exit(1);
         }
     }
 }
 
-bool Equalfiles(char *path1, char *path2)
+bool areEqualFiles(char *path1, char *path2)
 {
     FILE *file1 = fopen(path1, "rb");
     FILE *file2 = fopen(path2, "rb");
@@ -327,7 +325,7 @@ bool Equalfiles(char *path1, char *path2)
 void *compareFiles(void *arg)
 {
     ThreadArgs *args = (ThreadArgs *)arg;
-    FileList *fileList = args->FileList;
+    FileList *fileList = args->fileList;
     int start = args->start;
     int end = args->end;
 
@@ -346,16 +344,16 @@ void *compareFiles(void *arg)
             }
             if (i != j)
             {
-                pthread_mutex_lock(&lock);
-                if (!traverseTable(fileList->paths[i]) && Equalfiles(fileList->paths[i], fileList->paths[j]))
+                if (!traverseTable(fileList->paths[i]) && areEqualFiles(fileList->paths[i], fileList->paths[j]))
                 {
-#ifdef DEBUG
+                    pthread_mutex_lock(&lock);
+                #ifdef DEBUG
                     printf("File Path added to Dup List: %s\n", fileList->paths[i]);
-#endif
+                #endif
                     addTable(fileList->paths[i]);
                     dupList_count++;
+                    pthread_mutex_unlock(&lock);
                 }
-                pthread_mutex_unlock(&lock);
             }
         }
     }
@@ -371,7 +369,7 @@ void *compareFiles(void *arg)
     return NULL;
 }
 
-void traverseDirectory(const char *dir, FileList *filelist)
+void traverseDirectory(const char *dir, FileList *fileList)
 {
     struct dirent *entry;
     DIR *dp;
@@ -401,15 +399,15 @@ void traverseDirectory(const char *dir, FileList *filelist)
 
         if (S_ISDIR(statbuf.st_mode))
         {
-            traverseDirectory(path, filelist);
+            traverseDirectory(path, fileList);
         }
         else if (S_ISREG(statbuf.st_mode) && statbuf.st_size >= minSize)
         {
-            strncpy(filelist->paths[filelist->count++], path, MAX_PATH_LENGTH);
-#ifdef DEBUG
-            printf("(%d)File path added: %s\n", filelist->count, path);
-#endif
-            if (filelist->count > MAX_FILES - 1)
+            strncpy(fileList->paths[fileList->count++], path, MAX_PATH_LENGTH);
+            #ifdef DEBUG
+                 printf("(%d)File path added: %s\n", fileList->count, path);
+            #endif
+            if (fileList->count > MAX_FILES - 1)
             {
                 printf("Too many files \n");
                 exit(1);
@@ -436,33 +434,33 @@ int main(int argc, char *argv[])
     timer.it_value.tv_usec = 0;
     setitimer(ITIMER_REAL, &timer, NULL);
 
-    getinputs(argc, argv);
+    getInputs(argc, argv);
     const char *dir = argv[argc - 1];
     for (int i = 0; i < TABLE_SIZE; i++)
     {
         table[i].list = NULL;
     }
 
-    FileList filelist;
-    filelist.count = 0;
+    FileList fileList;
+    fileList.count = 0;
     pthread_mutex_init(&lock, NULL);
     pthread_cond_init(&cond, NULL);
 
-    traverseDirectory(dir, &filelist); // traverse files and save the paths to the filelist
+    traverseDirectory(dir, &fileList); // traverse files and save the paths to the fileList
 
     pthread_t threads[numThreads];
     ThreadArgs threadArgs[numThreads]; // init threads and thread args
 
-    int filesPerThread = filelist.count / numThreads;
+    int filesPerThread = fileList.count / numThreads;
 
     for (int i = 0; i < numThreads; i++)
     {
-        threadArgs[i].FileList = &filelist;
+        threadArgs[i].fileList = &fileList;
         threadArgs[i].start = i * filesPerThread;
 
         if (i == numThreads - 1)
         {
-            threadArgs[i].end = filelist.count;
+            threadArgs[i].end = fileList.count;
         }
         else
         {

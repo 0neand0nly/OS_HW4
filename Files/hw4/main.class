@@ -1,0 +1,4 @@
+class enum {
+	int hello;
+	char s;
+}

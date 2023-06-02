@@ -1,0 +1,8 @@
+{
+    "files.associations": {
+        "time.h": "c",
+        "type_traits": "c",
+        "utility": "c",
+        "stdio.h": "c"
+    }
+}
