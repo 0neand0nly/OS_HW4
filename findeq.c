@@ -211,13 +211,13 @@ void sig_Handler(int sig)
 {
     if (sig == SIGINT)
     {
-        perror("\nProgress: %d files processed\n", dupList_count);
+        printf("\nProgress: %d files processed\n", dupList_count);
         killProgram();
         exit(0);
     }
     else if (sig == SIGALRM)
     {
-        perror("Progress: %d files processed\n", dupList_count);
+        printf("Progress: %d files processed\n", dupList_count);
         alarm(5);
     }
 }

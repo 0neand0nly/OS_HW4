@@ -99,15 +99,18 @@
 		".//Files/hw4/image.png"
 	],
 	[
-		".//Files/hw4/folder/4f2a58af27abc49ecf55570043bbf938.cache.dill.track.dill",		
-".//Files/hw4/folder/subdir/NOTICES.Z"
+		".//homework4.pdf"
+	],
+	[
+		".//Files/hw4/folder/4f2a58af27abc49ecf55570043bbf938.cache.dill.track.dill",
+		".//Files/hw4/folder/subdir/NOTICES.Z"
 	],
 	[
 		".//Files/hw4/folder/subdir/newdirectory/symbolize_win32.inc"
 	],
 	[
-		".//Files/hw4/newfolder/codelab_rebuild.yaml",		
-".//Files/hw4/dir/hw5.dSYM/Contents/Resources/DWARF/hw5"
+		".//Files/hw4/dir/hw5.dSYM/Contents/Resources/DWARF/hw5",
+		".//Files/hw4/newfolder/codelab_rebuild.yaml"
 	],
 	[
 		".//Files/hw4/dir/png_image_copied.png"
@@ -215,8 +218,8 @@
 		".//Files/hw4/newfolder/video2.mp4"
 	],
 	[
-		".//Files/hw4/folder/subdir/newdirectory/hw1_22000141.cpp",		
-".//Files/hw4/Runner.xcodeproj/project.pbxproj"
+		".//Files/hw4/folder/subdir/newdirectory/hw1_22000141.cpp",
+		".//Files/hw4/Runner.xcodeproj/project.pbxproj"
 	],
 	[
 		".//Files/hw4/folder/subdir/ink_sparkle 3.frag"
@@ -228,9 +231,9 @@
 		".//Files/Hello"
 	],
 	[
-		".//Files/hw4/ink_sparkle 3.frag",		
-".//Files/hw4/folder/subdir/newdirectory/jquery-3.1.1.min.js",		
-".//Files/hw4/dir/CMakeLists.txt"
+		".//Files/hw4/folder/subdir/newdirectory/jquery-3.1.1.min.js",
+		".//Files/hw4/dir/CMakeLists.txt",
+		".//Files/hw4/ink_sparkle 3.frag"
 	],
 	[
 		".//Files/hw4/hw5.dSYM/Contents/Resources/DWARF/hw5"
