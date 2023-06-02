@@ -84,7 +84,7 @@ void addTable(const char *path)
     }
 }
 
-unsigned int traverseTable(const char *path)
+bool traverseTable(const char *path)
 {
     unsigned int index = hash(path);
     DuplicateFileList *curr = table[index].list;
@@ -102,6 +102,7 @@ void dumpTable(FILE *fp)
     fprintf(fp, "[\n"); // Start of duplicate file list
 
     bool isFirstGroup = true;
+    bool isFirstFile = true;
 
     for (int i = 0; i < TABLE_SIZE; i++)
     {
@@ -115,12 +116,16 @@ void dumpTable(FILE *fp)
 
             fprintf(fp, "\t[\n"); // Start of duplicate file group
 
-            fprintf(fp, "\t\t\"%s\"", curr->path); // Print duplicate file path
-            curr = curr->next;
+            isFirstFile = true;
 
             while (curr != NULL)
             {
-                fprintf(fp, ",\t\t\n\"%s\"", curr->path); // Print duplicate file path
+                if (isFirstFile)
+                    isFirstFile = false;
+                else
+                    fprintf(fp, ",\n"); // Comma and new line for separating duplicate files within the group
+
+                fprintf(fp, "\t\t\"%s\"", curr->path); // Print duplicate file path
                 curr = curr->next;
             }
 
@@ -238,9 +243,9 @@ void getInputs(int argc, char *argv[])
                 printf("Too Many Threads\n");
                 exit(1);
             }
-            #ifdef DEBUG
-                printf("Num Threads: %d\n", numThreads);
-            #endif
+#ifdef DEBUG
+            printf("Num Threads: %d\n", numThreads);
+#endif
         }
         else if (strcmp(argv[i], "-m=") == 0)
         {
@@ -256,9 +261,9 @@ void getInputs(int argc, char *argv[])
                 printf("Size is Too Small\n");
                 exit(1);
             }
-        #ifdef DEBUG
-             printf("Min Bytes: %d\n", minSize);
-        #endif
+#ifdef DEBUG
+            printf("Min Bytes: %d\n", minSize);
+#endif
         }
         else if (strcmp(argv[i], "-o=") == 0)
         {
@@ -276,9 +281,9 @@ void getInputs(int argc, char *argv[])
             }
 
             strcpy(outputPath, argv[i]);
-        #ifdef DEBUG
+#ifdef DEBUG
             printf("Output Path: %s\n", outputPath);
-        #endif
+#endif
             //
             // Change the program to produce output via file
             file_out = 1;
@@ -347,9 +352,9 @@ void *compareFiles(void *arg)
                 if (!traverseTable(fileList->paths[i]) && areEqualFiles(fileList->paths[i], fileList->paths[j]))
                 {
                     pthread_mutex_lock(&lock);
-                #ifdef DEBUG
+#ifdef DEBUG
                     printf("File Path added to Dup List: %s\n", fileList->paths[i]);
-                #endif
+#endif
                     addTable(fileList->paths[i]);
                     dupList_count++;
                     pthread_mutex_unlock(&lock);
@@ -404,9 +409,9 @@ void traverseDirectory(const char *dir, FileList *fileList)
         else if (S_ISREG(statbuf.st_mode) && statbuf.st_size >= minSize)
         {
             strncpy(fileList->paths[fileList->count++], path, MAX_PATH_LENGTH);
-            #ifdef DEBUG
-                 printf("(%d)File path added: %s\n", fileList->count, path);
-            #endif
+#ifdef DEBUG
+            printf("(%d)File path added: %s\n", fileList->count, path);
+#endif
             if (fileList->count > MAX_FILES - 1)
             {
                 printf("Too many files \n");
