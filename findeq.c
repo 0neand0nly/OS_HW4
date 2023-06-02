@@ -84,6 +84,7 @@ void addTable(const char *path)
     }
 }
 
+
 bool traverseTable(const char *path)
 {
     unsigned int index = hash(path);
@@ -144,6 +145,7 @@ void dumpTable(FILE *fp)
     fprintf(fp, "\n]\n"); // End of duplicate file list
 }
 
+
 void dumpTableC()
 {
     bool isFirstGroup = true;
@@ -181,7 +183,7 @@ void dumpTableC()
         }
     }
 }
-
+ 
 void killProgram()
 {
     if (file_out == 1)
@@ -209,13 +211,13 @@ void sig_Handler(int sig)
 {
     if (sig == SIGINT)
     {
-        printf("\nProgress: %d files processed\n", dupList_count);
+        perror("\nProgress: %d files processed\n", dupList_count);
         killProgram();
         exit(0);
     }
     else if (sig == SIGALRM)
     {
-        printf("Progress: %d files processed\n", dupList_count);
+        perror("Progress: %d files processed\n", dupList_count);
         alarm(5);
     }
 }
@@ -352,9 +354,9 @@ void *compareFiles(void *arg)
                 if (!traverseTable(fileList->paths[i]) && areEqualFiles(fileList->paths[i], fileList->paths[j]))
                 {
                     pthread_mutex_lock(&lock);
-#ifdef DEBUG
-                    printf("File Path added to Dup List: %s\n", fileList->paths[i]);
-#endif
+                    #ifdef DEBUG
+                        printf("File Path added to Dup List: %s\n", fileList->paths[i]);
+                    #endif
                     addTable(fileList->paths[i]);
                     dupList_count++;
                     pthread_mutex_unlock(&lock);
